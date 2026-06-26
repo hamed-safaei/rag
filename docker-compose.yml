@@ -1,0 +1,29 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant_db
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:latest
+    container_name: neo4j_db
+    ports:
+      - "7474:7474"   # Web UI
+      - "8073:7687"   # Bolt protocol
+    environment:
+      NEO4J_AUTH: neo4j/password123
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
+  neo4j_data:
+  neo4j_logs:
+  
