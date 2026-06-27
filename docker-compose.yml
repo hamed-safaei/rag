@@ -1,7 +1,7 @@
 services:
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: qdrant_db
+    container_name: qdrant_db_rag
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -11,7 +11,7 @@ services:
 
   neo4j:
     image: neo4j:latest
-    container_name: neo4j_db
+    container_name: neo4j_db_rag
     ports:
       - "7474:7474"   # Web UI
       - "8073:7687"   # Bolt protocol
@@ -22,8 +22,18 @@ services:
       - neo4j_logs:/logs
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_db_rag
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
 volumes:
   qdrant_storage:
   neo4j_data:
   neo4j_logs:
-  
+  redis_data:

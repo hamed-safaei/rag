@@ -5,13 +5,7 @@ from app.models.Chunks import ChildChunk, ParentChunk
 
 
 def parse_document(raw_text: str) -> list[ParentChunk]:
-    """
-    متن سند را خوانده و ساختار parent-child می‌سازد.
 
-    قراردادهای مارکرگذاری:
-      === N === عنوان    →  Parent  (عنوان اصلی)
-      --- N.M --- عنوان →  Child   (زیرعنوان)
-    """
     lines = raw_text.strip().splitlines()
 
     parents: list[ParentChunk] = []
