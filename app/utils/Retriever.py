@@ -1,167 +1,27 @@
-# from dataclasses import dataclass
-# from fastembed import SparseTextEmbedding
-# from openai import OpenAI
-# from qdrant_client import QdrantClient
-# from qdrant_client.models import (
-#     FusionQuery,
-#     NamedSparseVector,
-#     NamedVector,
-#     Prefetch,
-#     SparseVector,
-#     Fusion,
-# )
-
-# from app.core.config import settings
-
-# # ─────────────────────────────────────────────────────────────────────
-
-# _EMBEDDING_MODEL = "text-embedding-3-large"
-# _DENSE_VECTOR_NAME = "dense"
-# _SPARSE_VECTOR_NAME = "sparse"
-
-# _openai_client = OpenAI(
-#     base_url="https://api.gapgpt.app/v1",
-#     api_key=settings.OPENAI_API_KEY,
-# )
-
-# _qdrant_client = QdrantClient(url="http://localhost:6333")
-# _sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
-
-
-# # ────────────────────────────────────────────────────────────────────
-
-# def _embed_dense(text: str) -> list[float]:
-#     response = _openai_client.embeddings.create(
-#         model=_EMBEDDING_MODEL,
-#         input=text,
-#     )
-#     return response.data[0].embedding
-
-
-# def _embed_sparse(text: str) -> dict:
-#     result = list(_sparse_model.embed([text]))[0]
-#     return {
-#         "indices": result.indices.tolist(),
-#         "values": result.values.tolist(),
-#     }
-
-
-# # ───────────────────────────────────────────────────────────────────
-
-# @dataclass
-# class RetrievalResult:
-#     score: float
-#     child_id: str
-#     child_title: str
-#     child_content: str
-#     parent_id: str
-#     parent_title: str
-#     parent_content: str
-
-
-# # ────────────────────────────────────────────────────────────────────
-
-# def search(
-#     question: str,
-#     collection_name: str = "rag_chunks",
-#     top_k: int = 5,
-#     prefetch_k: int = 20,
-# ) -> list[RetrievalResult]:
-
-#     dense_vector = _embed_dense(question)
-#     sparse_vector = _embed_sparse(question)
-
-#     result = _qdrant_client.query_points(
-#         collection_name=collection_name,
-#         prefetch=[
-#             Prefetch(
-#                 query=dense_vector,
-#                 using=_DENSE_VECTOR_NAME,
-#                 limit=prefetch_k,
-#             ),
-#             Prefetch(
-#                 query=SparseVector(**sparse_vector),
-#                 using=_SPARSE_VECTOR_NAME,
-#                 limit=prefetch_k,
-#             ),
-#         ],
-#         query=FusionQuery(fusion=Fusion.RRF),
-#         limit=top_k,
-#         with_payload=True,
-#     )
-
-#     hits = result.points
-
-#     return [
-#         RetrievalResult(
-#             score=hit.score,
-#             child_id=hit.payload["child_id"],
-#             child_title=hit.payload["child_title"],
-#             child_content=hit.payload["child_content"],
-#             parent_id=hit.payload["parent_id"],
-#             parent_title=hit.payload["parent_title"],
-#             parent_content=hit.payload["parent_content"],
-#         )
-#         for hit in hits
-#     ]
-
-
-
-
-
-
-from dataclasses import dataclass, field
-from fastembed import SparseTextEmbedding
-from openai import OpenAI
+from dataclasses import dataclass
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
+    Fusion,
     FusionQuery,
-    NamedSparseVector,
-    NamedVector,
     Prefetch,
     SparseVector,
-    Fusion,
 )
 
-from app.core.config import settings
-
-# ── تنظیمات ───────────────────────────────────────────────────────────────────
-
-_EMBEDDING_MODEL = "text-embedding-3-large"
-_DENSE_VECTOR_NAME = "dense"
-_SPARSE_VECTOR_NAME = "sparse"
-
-_openai_client = OpenAI(
-    base_url="https://api.gapgpt.app/v1",
-    api_key=settings.OPENAI_API_KEY,
+from app.models.Chunks import ParentChunk
+from app.utils.Embedder import (
+    _DENSE_VECTOR_NAME,
+    _SPARSE_VECTOR_NAME,
+    _embed_dense_batch,
+    _embed_sparse,
 )
 
 _qdrant_client = QdrantClient(url="http://localhost:6333")
-_sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
 
-# ── embedding ──────────────────────────────────────────────────────────────────
-
-def _embed_dense(text: str) -> list[float]:
-    response = _openai_client.embeddings.create(
-        model=_EMBEDDING_MODEL,
-        input=text,
-    )
-    return response.data[0].embedding
-
-
-def _embed_sparse(text: str) -> dict:
-    result = list(_sparse_model.embed([text]))[0]
-    return {
-        "indices": result.indices.tolist(),
-        "values": result.values.tolist(),
-    }
-
-
-# ── مدل‌های خروجی ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────
 
 @dataclass
-class ChildRetrievalResult:
+class ChildSearchResult:
     score: float
     child_id: str
     child_title: str
@@ -171,89 +31,73 @@ class ChildRetrievalResult:
     parent_content: str
 
 
-@dataclass
-class ParentRetrievalResult:
-    score: float
-    parent_id: str
-    parent_title: str
-    parent_content: str   # متن کامل — برای ارسال به LLM
-    summary: str          # خلاصه‌ای که embed شده
-    child_ids: list[str] = field(default_factory=list)
+# ─────────────────────────────────────────────────────────────
+
+def search_children(
+    query: str,
+    collection_name: str = "rag_chunks",
+    top_k: int = 5,
+) -> list[ChildSearchResult]:
+    """
+    جستجوی hybrid (dense + sparse / RRF) روی child chunk ها.
+
+    پارامترها:
+        query           : متن سؤال کاربر
+        collection_name : نام collection در Qdrant
+        top_k           : تعداد نتایج بازیابی
+
+    خروجی:
+        لیستی از ChildSearchResult مرتب‌شده بر اساس امتیاز
+    """
+    # ── embedding ──
+    dense_vector: list[float] = _embed_dense_batch([query])[0]
+
+    sparse_raw = _embed_sparse(query)         
+    sparse_vector = SparseVector(
+        indices=sparse_raw["indices"],
+        values=sparse_raw["values"],
+    )
 
 
-# ── تابع جستجوی پایه (مشترک) ──────────────────────────────────────────────────
-
-def _hybrid_search(
-    question: str,
-    collection_name: str,
-    top_k: int,
-    prefetch_k: int,
-) -> list:
-    """جستجوی hybrid را اجرا کرده و raw hits برمی‌گرداند."""
-    dense_vector = _embed_dense(question)
-    sparse_vector = _embed_sparse(question)
-
-    result = _qdrant_client.query_points(
+    
+    response = _qdrant_client.query_points(
         collection_name=collection_name,
         prefetch=[
             Prefetch(
                 query=dense_vector,
                 using=_DENSE_VECTOR_NAME,
-                limit=prefetch_k,
+                limit=top_k * 2,
             ),
             Prefetch(
-                query=SparseVector(**sparse_vector),
+                query=sparse_vector,
                 using=_SPARSE_VECTOR_NAME,
-                limit=prefetch_k,
+                limit=top_k * 2,
             ),
         ],
         query=FusionQuery(fusion=Fusion.RRF),
         limit=top_k,
         with_payload=True,
     )
-    return result.points
 
-
-# ── توابع عمومی ───────────────────────────────────────────────────────────────
-
-def search_children(
-    question: str,
-    collection_name: str = "rag_chunks",
-    top_k: int = 5,
-    prefetch_k: int = 20,
-) -> list[ChildRetrievalResult]:
-    """جستجو در collection مربوط به child chunk ها."""
-    hits = _hybrid_search(question, collection_name, top_k, prefetch_k)
     return [
-        ChildRetrievalResult(
-            score=hit.score,
-            child_id=hit.payload["child_id"],
-            child_title=hit.payload["child_title"],
-            child_content=hit.payload["child_content"],
-            parent_id=hit.payload["parent_id"],
-            parent_title=hit.payload["parent_title"],
-            parent_content=hit.payload["parent_content"],
+        ChildSearchResult(
+            score=point.score,
+            child_id=point.payload["child_id"],
+            child_title=point.payload["child_title"],
+            child_content=point.payload["child_content"],
+            parent_id=point.payload["parent_id"],
+            parent_title=point.payload["parent_title"],
+            parent_content=point.payload["parent_content"],
         )
-        for hit in hits
+        for point in response.points
     ]
 
 
-def search_parents(
-    question: str,
-    collection_name: str = "rag_parent_chunks",
-    top_k: int = 5,
-    prefetch_k: int = 20,
-) -> list[ParentRetrievalResult]:
-    """جستجو در collection مربوط به parent chunk ها (multi-representation indexing)."""
-    hits = _hybrid_search(question, collection_name, top_k, prefetch_k)
-    return [
-        ParentRetrievalResult(
-            score=hit.score,
-            parent_id=hit.payload["parent_id"],
-            parent_title=hit.payload["parent_title"],
-            parent_content=hit.payload["parent_content"],
-            summary=hit.payload["summary"],
-            child_ids=hit.payload.get("child_ids", []),
-        )
-        for hit in hits
-    ]
+# ───────────────────────────────────────────
+
+def build_parents_map(parents: list[ParentChunk]) -> dict[str, ParentChunk]:
+    """
+    از لیست ParentChunk ها یک دیکشنری {parent_id -> ParentChunk} می‌سازد.
+    برای دسترسی سریع در لایه تصمیم‌گیری (Decider) استفاده می‌شود.
+    """
+    return {parent.id: parent for parent in parents}

@@ -100,9 +100,13 @@ def embed_and_store(
     for batch_start in range(0, len(pairs), batch_size):
         batch = pairs[batch_start : batch_start + batch_size]
         texts = [
-            f"{child.title}\n{child.content}"
-            for child, _ in batch
-        ]
+    (
+        f"Section: {parent.title}\n"
+        f"Subsection: {child.title}\n\n"
+        f"{child.content}"
+    )
+    for child, parent in batch
+]
         dense_vectors = _embed_dense_batch(texts)
 
         points: list[PointStruct] = []
