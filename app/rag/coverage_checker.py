@@ -1,96 +1,8 @@
-# app/rag/coverage_checker.py
-#
-# منبع اصلی: app/utils/CoverageChecker.py
-# فقط محل و نام فایل استاندارد شده؛ منطق بدون تغییر.
+#coverage_checker.py
 
 import json
 import re
-
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-
-from app.core.config import settings
-
-
-# ────────────────────────────────────────────────────────────────
-
-_llm = ChatOpenAI(
-    model="gpt-4.1-mini",
-    temperature=0.3,
-    max_tokens=1024,
-    base_url="https://api.gapgpt.app/v1",
-    api_key=settings.OPENAI_API_KEY,
-)
-
-
-# ────────────────────────────────────────────────────────────
-
-_SYSTEM_PROMPT = """
-تو یک Coverage Checker در یک سیستم RAG هستی.
-
-وظیفه تو پاسخ دادن به سؤال کاربر نیست.
-
-وظیفه تو فقط بررسی کامل بودن Context است.
-ورودی تو شامل موارد زیر است:
-
-1. سؤال اصلی کاربر
-2. Context بازیابی شده
---------------------------------------------------
-
-ابتدا سؤال کاربر را به بخش‌های اطلاعاتی موردنیاز تجزیه کن.
-
-سپس بررسی کن که آیا Context هر بخش را پوشش می‌دهد یا خیر.
-
-اگر همه بخش‌ها پوشش داده شده‌اند:
-
-{{
-  "status":"COMPLETE",
-}}
-
-اگر فقط بخشی از سؤال قابل پاسخ است:
-فقظ و فقط قسمتی که پاسخ برای آن وجود ندارد را در missing قرار بده
-{{
-  "status":"PARTIAL",
-  "missing":[
-      "...",
-      "..."
-  ]
-}}
-
-اگر هیچ بخشی قابل پاسخ نیست:
-
-{{
-  "status":"NOT_FOUND",
-  "missing":[
-      "..."
-  ]
-}}
-
---------------------------------------------------
-
-قواعد مهم
-- فقط JSON معتبر تولید کن.
-missing را سعی نکن خودت پر کنی یا تغیری در پرسش کاربر بدی ، هر قسمتی که پاسخ برایش وجود ندارد را همانگونه که هست در این بخش قرار بده
-
-"""
-
-
-_HUMAN_TEMPLATE = """\
-Context:
-{context}
-
-سؤال کاربر:
-{query}
-"""
-
-
-_prompt = ChatPromptTemplate.from_messages([
-    ("system", _SYSTEM_PROMPT),
-    ("human", _HUMAN_TEMPLATE),
-])
-
-_chain = _prompt | _llm | StrOutputParser()
+from app.rag.chians import coverage_chain
 
 
 # ─────────────────────────────────────────────────────────
@@ -153,7 +65,7 @@ def Coverage_Checker(query: str, context: str) -> dict:
     if not context or not context.strip():
         return {"status": "NOT_FOUND", "missing": [query]}
 
-    raw: str = _chain.invoke({
+    raw: str = coverage_chain.invoke({
         "query": query,
         "context": context,
     })

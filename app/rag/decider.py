@@ -1,90 +1,11 @@
-# app/rag/decider.py
-#
-# منبع اصلی: app/utils/Decider.py
-# فقط محل و نام فایل استاندارد شده؛ منطق بدون تغییر.
+#decider.py
 
-import json
 import re
 from dataclasses import dataclass, field
-
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-
-from app.core.config import settings
+from app.rag.chians import decider_chain
+import json
 
 
-# ────────────────────────────────────────────────────────────────
-
-_llm = ChatOpenAI(
-    model="gpt-4.1-mini",
-    temperature=0,
-    max_tokens=256,
-    base_url="https://api.gapgpt.app/v1",
-    api_key=settings.OPENAI_API_KEY,
-)
-
-
-# ────────────────────────────────────────────────────────────
-
-_SYSTEM_PROMPT = """تو یک دستیار بررسی Context در سیستم RAG هستی.
-
-وظیفه‌ات پاسخ به سؤال نیست. فقط باید تک‌تک Childهای بازیابی‌شده را یکی‌یکی بررسی کنی
-و برای هرکدام تصمیم بگیری که آیا برای پاسخ‌دهی به سؤال لازم هستند یا نه.
-
-ورودی:
-1. سؤال کاربر
-2. مجموعه‌ای از Child ها 
-
-روش بررسی هر Child:
-فقط به این سه مورد نگاه کن:
-- parent_title
-- child_title
-- child_content
-
-برای هر Child:
-- اگر کاملاً مطمئن بودی که نه parent_title، نه child_title و نه child_content
-  هیچ ربطی به سؤال ندارند → از آن Child بگذر و به سراغ Child بعدی برو (چیزی برایش برنگردان).
-- حتی اگر بخشی از child_content با سوال مرتبط بود ، آن child تایید است
-
-نکات مهم:
-- همیشه فقط parent_id برگردانده می‌شود، هرگز child_id برگردانده نمی‌شود.
-- اگر چند Child متعلق به یک parent مرتبط تشخیص داده شدند، parent_id فقط یک‌بار
-  (به‌صورت یکتا) در خروجی بیاید.
-- ترتیب خاصی برای parent_id ها لازم نیست.
-
-━━━ خروجی ━━━
-فقط یک JSON معتبر و تک‌خطی، بدون هیچ توضیح یا متن اضافه:
-
-{{
-  "parents": ["..."]
-}}
-
-اگر هیچ Childی واجد شرایط نبود، آرایه را خالی برگردان:
-
-{{
-  "parents": []
-}}
-"""
-
-_HUMAN_TEMPLATE = """\
-سؤال کاربر:
-{query}
-
-Child های بازیابی‌شده:
-{formatted_chunks}
-"""
-
-
-_prompt = ChatPromptTemplate.from_messages([
-    ("system", _SYSTEM_PROMPT),
-    ("human", _HUMAN_TEMPLATE),
-])
-
-_chain = _prompt | _llm | StrOutputParser()
-
-
-# ─────────────────────────────────────────────────────────
 
 @dataclass
 class DecisionResult:
@@ -196,7 +117,7 @@ def decide_context(
 
     formatted_chunks = _format_chunks(child_results)
 
-    raw_output: str = _chain.invoke({
+    raw_output: str = decider_chain.invoke({
         "query": query,
         "formatted_chunks": formatted_chunks,
     })

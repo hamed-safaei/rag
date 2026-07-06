@@ -238,16 +238,3 @@ def print_route_result(route_result: dict) -> None:
     print(json.dumps(route_result.get("result", {}), ensure_ascii=False, indent=2))
     print("=" * 60)
 
-
-# ────────────────────────────────────────────────────────────────
-# مثال استفاده:
-#
-# result = route_query("تفاوت rag و graphrag چیست و کدام برای استریم بهتره؟")
-# print_route_result(result)
-#
-# در کل اجرا فقط ۲ API call زده می‌شود:
-#   1) _router_llm.invoke(...)  → فقط تصمیم‌گیری (tool_call)
-#   2) _multiquery_chain.invoke(...) یا _decompose_chain.invoke(...)
-#      → تولید محتوای نهایی
-# و هیچ بازگشتی به مدل اول برای «جمع‌بندی» نتیجه رخ نمی‌دهد.
-# ────────────────────────────────────────────────────────────────
