@@ -82,7 +82,7 @@ def build_chunks(path: str) -> list[ParentChunk]:
 
         intro = ChildChunk(
             id=f"{current_parent.id}.{child_counter}",
-            title=f"مقدمه: {current_parent.title}",
+            title=f"مقدمه ای برای: {current_parent.title}",
             content="\n".join(pending_body),
             parent_id=current_parent.id,
         )

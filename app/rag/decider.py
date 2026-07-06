@@ -1,4 +1,7 @@
-# Decider.py
+# app/rag/decider.py
+#
+# منبع اصلی: app/utils/Decider.py
+# فقط محل و نام فایل استاندارد شده؛ منطق بدون تغییر.
 
 import json
 import re
