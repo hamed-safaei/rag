@@ -12,33 +12,6 @@ TRANSFORM_TOP_K = 1
 
 
 
-# class RAGState(TypedDict, total=False):
-#     query: str                 # سؤال اصلی کاربر (ثابت در طول گراف)
-#     child_results: list        # آخرین نتایج child بازیابی‌شده
-#     parent_ids: list[str]      # مجموع تمام parent_id هایی که تا الان context‌شان ساخته شده
-#     context: str                # context تجمعی نهایی
-#     status: str                 # آخرین خروجی Coverage_Checker: COMPLETE / PARTIAL / NOT_FOUND
-#     missing: list[str]           # آخرین بخش‌های ناقص گزارش‌شده توسط Coverage_Checker
-
-#     missing_before_transform: list[str]
-#     # همان missing ای که باعث ورود به مرحله‌ی transform شد؛ برخلاف
-#     # "missing" که بعد از دومین coverage check ممکن است خالی شود (مثلاً
-#     # چون status نهایی COMPLETE شده)، این فیلد ثابت می‌ماند تا مشخص باشد
-#     # قبل از transform دقیقاً چه چیزی ناقص تشخیص داده شده بود.
-
-#     transform_tool_used: list[str]
-#     # به ازای هر آیتم از missing_before_transform، نام ابزاری که
-#     # route_query انتخاب کرده (multiquery یا decompose).
-
-#     transform_queries: list[str]
-#     # مجموع تمام query/sub_query هایی که توسط transformer (چه از
-#     # multiquery چه از decompose) برای بازیابی مجدد ساخته و سرچ شده‌اند.
-
-#     retried: bool                # آیا یک دور transform را قبلاً طی کرده‌ایم؟
-#     answer: str                  # پاسخ نهایی
-
-
-
 
 def _extract_transform_queries(route_result: dict) -> list[str]:
     """
@@ -56,9 +29,7 @@ def _extract_transform_queries(route_result: dict) -> list[str]:
     return [q for q in queries if str(q).strip()]
 
 
-# ════════════════════════════════════════════════════════════════
-# Node 1 : جست‌وجوی اولیه بردار بر اساس سؤال کاربر
-# ════════════════════════════════════════════════════════════════
+# Node 1 
 
 def node_search(state: RAGState) -> dict:
     child_results = search_children(
@@ -69,9 +40,7 @@ def node_search(state: RAGState) -> dict:
     return {"child_results": child_results}
 
 
-# ════════════════════════════════════════════════════════════════
-# Node 2 : تشخیص parent های مرتبط و ساخت context اولیه
-# ════════════════════════════════════════════════════════════════
+# Node 2 
 
 def node_decide(state: RAGState) -> dict:
     result = decide_context(state.query, state.child_results)
@@ -81,9 +50,7 @@ def node_decide(state: RAGState) -> dict:
     }
 
 
-# ════════════════════════════════════════════════════════════════
-# Node 3 : بررسی کفایت context (Coverage Check)
-# ════════════════════════════════════════════════════════════════
+# Node 3 
 
 def node_coverage(state: RAGState) -> dict:
     check_result = Coverage_Checker(state.query, state.context)
@@ -93,9 +60,7 @@ def node_coverage(state: RAGState) -> dict:
     }
 
 
-# ════════════════════════════════════════════════════════════════
-# Node 4 : Transform
-# ════════════════════════════════════════════════════════════════
+# Node 4
 
 def node_transform(state: RAGState) -> dict:
     missing_list = state.missing or []
@@ -169,18 +134,14 @@ def node_transform(state: RAGState) -> dict:
     }
 
 
-# ════════════════════════════════════════════════════════════════
-# Node 5 : تولید پاسخ نهایی
-# ════════════════════════════════════════════════════════════════
+# Node 5 
 
 def node_generate(state: RAGState) -> dict:
     answer = generate_answer(state.query, state.context)
     return {"answer": answer}
 
 
-# ════════════════════════════════════════════════════════════════
-# مسیر شرطی بعد از Coverage
-# ════════════════════════════════════════════════════════════════
+# router
 
 def route_after_coverage(state: RAGState) -> str:
     if state.status == "COMPLETE":

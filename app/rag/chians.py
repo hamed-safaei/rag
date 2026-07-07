@@ -12,13 +12,21 @@ from app.core.config import settings
 
 BASE_URL = "https://api.gapgpt.app/v1"
 API_KEY  = settings.OPENAI_API_KEY
-MODEL    = "gpt-4o"
 
 
 
 
 
 llm = ChatOpenAI(
+    model="gpt-4.1-mini",
+    temperature=0,
+    max_tokens=256,
+    base_url="https://api.gapgpt.app/v1",
+    api_key=settings.OPENAI_API_KEY,
+)
+
+
+generator_llm = ChatOpenAI(
     model="gpt-4.1-mini",
     temperature=0.3,
     max_tokens=1024,
@@ -29,6 +37,6 @@ llm = ChatOpenAI(
 
 decider_chain = decider_prompt | llm | StrOutputParser()
 coverage_chain = coverage_prompt | llm | StrOutputParser()
-generator_chain = generator_prompt | llm | StrOutputParser()
+generator_chain = generator_prompt | generator_llm | StrOutputParser()
 
 
