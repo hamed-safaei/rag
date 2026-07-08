@@ -4,8 +4,10 @@ import re
 from dataclasses import dataclass, field
 from app.rag.chians import decider_chain
 import json
+import uuid
+from qdrant_client import QdrantClient
 
-
+_qdrant_client = QdrantClient(url="http://localhost:6333")
 
 @dataclass
 class DecisionResult:
@@ -70,32 +72,73 @@ def _parse_response(raw: str) -> list[str]:
 
 # ────────────────────────────────────────────────
 
+# def _build_context(
+#     parent_ids: list[str],
+#     child_results,
+# ) -> str:
+#     """
+#     parent_ids خالی → خروجی خالی (NONE)
+#     در غیر این صورت: برای هر parent_id انتخاب‌شده، کل parent_content
+#     یک‌بار (به‌صورت یکتا) اضافه می‌شود.
+#     """
+#     if not parent_ids:
+#         return ""
+
+#     parts = []
+#     added_parents = set()
+#     id_set = set(parent_ids)
+
+#     for r in child_results:
+#         if r.parent_id in id_set and r.parent_id not in added_parents:
+#             added_parents.add(r.parent_id)
+#             parts.append(
+#                 f"### [{r.parent_id}] {r.parent_title}\n"
+#                 f"{r.parent_content}"
+#             )
+
+#     return "\n\n".join(parts)
+
 def _build_context(
     parent_ids: list[str],
-    child_results,
+    parent_collection_name: str = "loader_parents",
 ) -> str:
     """
-    parent_ids خالی → خروجی خالی (NONE)
-    در غیر این صورت: برای هر parent_id انتخاب‌شده، کل parent_content
-    یک‌بار (به‌صورت یکتا) اضافه می‌شود.
+    parent_ids خالی → خروجی خالی
+    در غیر این صورت: برای هر parent_id، parent_content متناظر از
+    کالکشن parents (docstore) بازیابی و یک‌بار (یکتا) اضافه می‌شود.
+    ترتیب خروجی مطابق ترتیب ورودی parent_ids حفظ می‌شود.
     """
     if not parent_ids:
         return ""
 
-    parts = []
-    added_parents = set()
-    id_set = set(parent_ids)
+    # id یکتای نگاشت‌شده در Qdrant که موقع ذخیره‌سازی ساخته بودیم
+    point_ids = [
+        str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{parent_collection_name}:{pid}"))
+        for pid in dict.fromkeys(parent_ids)  # حذف تکراری‌ها با حفظ ترتیب
+    ]
 
-    for r in child_results:
-        if r.parent_id in id_set and r.parent_id not in added_parents:
-            added_parents.add(r.parent_id)
-            parts.append(
-                f"### [{r.parent_id}] {r.parent_title}\n"
-                f"{r.parent_content}"
-            )
+    records = _qdrant_client.retrieve(
+        collection_name=parent_collection_name,
+        ids=point_ids,
+        with_payload=True,
+        with_vectors=False,
+    )
+
+    payload_by_parent_id = {
+        rec.payload["parent_id"]: rec.payload for rec in records
+    }
+
+    parts = []
+    for pid in dict.fromkeys(parent_ids):
+        payload = payload_by_parent_id.get(pid)
+        if payload is None:
+            continue  # پیدا نشد (مثلاً id نامعتبر یا حذف شده)
+        parts.append(
+            f"### [{payload['parent_id']}] {payload['parent_title']}\n"
+            f"{payload['parent_content']}"
+        )
 
     return "\n\n".join(parts)
-
 
 # ─────────────────────────────────────────────────────────
 
@@ -123,12 +166,13 @@ def decide_context(
     })
 
     parent_ids = _parse_response(raw_output)
-    context = _build_context(parent_ids, child_results)
+    context = _build_context(parent_ids)
 
     return DecisionResult(
         parent_ids=parent_ids,
         context=context,
     )
+
 
 
 # ───────────────────────────────────────────────────────────────

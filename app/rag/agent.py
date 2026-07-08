@@ -1,8 +1,9 @@
 from app.rag.schema.graphstate import RAGState
 from app.rag.graph import _rag_app
 
+from langfuse import observe
 
-
+@observe()
 def run_rag_pipeline(query: str) -> RAGState:
     """
     کل جریان RAG را برای یک سؤال کاربر اجرا می‌کند و state نهایی

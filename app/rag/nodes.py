@@ -34,7 +34,7 @@ def _extract_transform_queries(route_result: dict) -> list[str]:
 def node_search(state: RAGState) -> dict:
     child_results = search_children(
         state.query,
-        collection_name="loader",
+        collection_name="loader_children",
         top_k=FIRST_SEARCH_TOP_K,
     )
     return {"child_results": child_results}
@@ -92,27 +92,31 @@ def node_transform(state: RAGState) -> dict:
         for q in transform_queries:
             results = search_children(
                 query=q,
-                collection_name="loader",
+                collection_name="loader_children",
                 top_k=TRANSFORM_TOP_K,
             )
             all_new_child_results.extend(results)
 
-    # حذف childهای تکراری
-    unique_results = {r.child_id: r for r in all_new_child_results}
-    unique_results = list(unique_results.values())
 
-    unique_parent_ids = list({r.parent_id for r in unique_results})
+        # فقط parent_id های یکتا
+        unique_parent_ids = list({
+            r.parent_id
+            for r in all_new_child_results
+        })
 
-    # فقط parentهای جدید
-    seen_parent_ids = set(state.parent_ids)
-    new_parent_ids = [
-        pid for pid in unique_parent_ids
-        if pid not in seen_parent_ids
-    ]
+
+        # حذف parent هایی که قبلاً داشتیم
+        seen_parent_ids = set(state.parent_ids)
+
+        new_parent_ids = [
+            pid
+            for pid in unique_parent_ids
+            if pid not in seen_parent_ids
+        ]
 
     new_context = ""
     if new_parent_ids:
-        new_context = _build_context(new_parent_ids, unique_results)
+        new_context = _build_context(new_parent_ids)
 
     merged_context = state.context
     if new_context:

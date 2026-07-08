@@ -53,7 +53,7 @@ def build_rag_graph():
         },
     )
 
-    graph.add_edge("transform", "coverage")
+    graph.add_edge("transform", "generate")
     graph.add_edge("generate", END)
 
     return graph.compile()

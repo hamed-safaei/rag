@@ -27,13 +27,13 @@ _qdrant_client = QdrantClient(url="http://localhost:6333")
 
 @dataclass
 class ChildSearchResult:
-    score: float
-    child_id: str
+    # score: float
+    # child_id: str
+    parent_title: str
     child_title: str
     child_content: str
     parent_id: str
-    parent_title: str
-    parent_content: str
+    # parent_content: str
 
 
 # ─────────────────────────────────────────────────────────────
@@ -84,13 +84,13 @@ def search_children(
 
     return [
         ChildSearchResult(
-            score=point.score,
-            child_id=point.payload["child_id"],
+            # score=point.score,
+            # child_id=point.payload["child_id"],
             child_title=point.payload["child_title"],
             child_content=point.payload["child_content"],
             parent_id=point.payload["parent_id"],
             parent_title=point.payload["parent_title"],
-            parent_content=point.payload["parent_content"],
+            # parent_content=point.payload["parent_content"],
         )
         for point in response.points
     ]

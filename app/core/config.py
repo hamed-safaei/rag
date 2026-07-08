@@ -19,5 +19,8 @@ class Settings:
     NEO4J_USER = os.getenv("NEO4J_USER", "")
     NEO4J_PASS = os.getenv("NEO4J_PASS", "")
 
+    LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+    LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "")
 
 settings = Settings()
