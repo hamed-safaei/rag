@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
-from app.rag.chians import decider_chain
+from test.rag.chians import decider_chain
 import json
 import uuid
 from qdrant_client import QdrantClient

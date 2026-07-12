@@ -26,7 +26,7 @@ app/rag/graph.py
 from typing import TypedDict
 
 from langgraph.graph import StateGraph, END
-from app.rag.schema.graphstate import RAGState
+from test.rag.schema.graphstate import RAGState
 from .nodes import node_search , node_decide,node_coverage,node_transform,node_generate,route_after_coverage
 
 

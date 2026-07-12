@@ -1,8 +1,3 @@
-# app/services/retriever.py
-#
-# منبع اصلی: app/utils/Retriever.py
-# فقط محل و نام فایل استاندارد شده؛ منطق بدون تغییر.
-
 from dataclasses import dataclass
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -13,7 +8,7 @@ from qdrant_client.models import (
 )
 
 from app.models.Chunks import ParentChunk
-from app.services.embedder import (
+from app.utils.Embedder import (
     _DENSE_VECTOR_NAME,
     _SPARSE_VECTOR_NAME,
     _embed_dense_batch,
@@ -28,11 +23,11 @@ _qdrant_client = QdrantClient(url="http://localhost:6333")
 @dataclass
 class ChildSearchResult:
     # score: float
-    # child_id: str
     parent_title: str
     child_title: str
     child_content: str
     parent_id: str
+    child_id: str
     # parent_content: str
 
 
@@ -57,12 +52,14 @@ def search_children(
     # ── embedding ──
     dense_vector: list[float] = _embed_dense_batch([query])[0]
 
-    sparse_raw = _embed_sparse(query)
+    sparse_raw = _embed_sparse(query)         
     sparse_vector = SparseVector(
         indices=sparse_raw["indices"],
         values=sparse_raw["values"],
     )
 
+
+    
     response = _qdrant_client.query_points(
         collection_name=collection_name,
         prefetch=[
@@ -85,11 +82,11 @@ def search_children(
     return [
         ChildSearchResult(
             # score=point.score,
-            # child_id=point.payload["child_id"],
+            parent_title=point.payload["parent_title"],
             child_title=point.payload["child_title"],
             child_content=point.payload["child_content"],
             parent_id=point.payload["parent_id"],
-            parent_title=point.payload["parent_title"],
+            child_id=point.payload["child_id"],
             # parent_content=point.payload["parent_content"],
         )
         for point in response.points
@@ -98,9 +95,9 @@ def search_children(
 
 # ───────────────────────────────────────────
 
-def build_parents_map(parents: list[ParentChunk]) -> dict[str, ParentChunk]:
-    """
-    از لیست ParentChunk ها یک دیکشنری {parent_id -> ParentChunk} می‌سازد.
-    برای دسترسی سریع در لایه تصمیم‌گیری (Decider) استفاده می‌شود.
-    """
-    return {parent.id: parent for parent in parents}
+# def build_parents_map(parents: list[ParentChunk]) -> dict[str, ParentChunk]:
+#     """
+#     از لیست ParentChunk ها یک دیکشنری {parent_id -> ParentChunk} می‌سازد.
+#     برای دسترسی سریع در لایه تصمیم‌گیری (Decider) استفاده می‌شود.
+#     """
+#     return {parent.id: parent for parent in parents}

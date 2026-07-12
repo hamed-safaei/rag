@@ -1,7 +1,6 @@
 from sentence_transformers import CrossEncoder
 
 
-# بارگذاری مدل Re-ranker
 reranker = CrossEncoder(
     "BAAI/bge-reranker-v2-m3"
 )
@@ -9,7 +8,7 @@ reranker = CrossEncoder(
 
 def rerank_results(query, child_results, top_k=5):
     
-    # ساخت زوج‌های (Query, Document)
+    # (Query, Document)
     pairs = []
 
     for item in child_results:
@@ -29,11 +28,9 @@ def rerank_results(query, child_results, top_k=5):
         )
 
 
-    # گرفتن امتیاز ارتباط
     scores = reranker.predict(pairs)
 
 
-    # اضافه کردن امتیاز به نتایج
     ranked_results = []
 
     for item, score in zip(child_results, scores):
@@ -49,17 +46,14 @@ def rerank_results(query, child_results, top_k=5):
         )
 
 
-    # مرتب سازی بر اساس امتیاز
     ranked_results = sorted(
         ranked_results,
         key=lambda x: x["rerank_score"],
         reverse=True
     )
 
-    # فقط بهترین‌ها
     ranked_results = ranked_results[:top_k]
 
-    # حذف score از خروجی
     for item in ranked_results:
         item.pop("rerank_score")
 

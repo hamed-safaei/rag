@@ -2,7 +2,7 @@
 
 import json
 import re
-from app.rag.chians import coverage_chain
+from test.rag.chians import coverage_chain
 
 
 # ─────────────────────────────────────────────────────────

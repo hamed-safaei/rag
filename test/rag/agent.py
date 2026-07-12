@@ -1,5 +1,5 @@
-from app.rag.schema.graphstate import RAGState
-from app.rag.graph import _rag_app
+from test.rag.schema.graphstate import RAGState
+from test.rag.graph import _rag_app
 
 from langfuse import observe
 
