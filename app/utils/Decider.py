@@ -96,24 +96,38 @@ class DecisionResult:
 
 # ─────────────────────────────────────────
 
-def _format_chunks(child_results) -> str:
-    """
-    parent title :  ...
-    child title  :  ...
-    child content:
-    ...
-    parent id    :  X
-    """
-    parts = []
-    for r in child_results:
-        parts.append(
-            f"parent title :  {r.parent_title}\n"
-            f"child title : {r.child_title}\n"
-            f"child content :\n{r.child_content}\n"
-            f"parent id    :  {r.parent_id}"
-        )
-    return "\n\n---\n\n".join(parts)
+# def _format_chunks(child_results) -> str:
+#     """
+#     parent title :  ...
+#     child title  :  ...
+#     child content:
+#     ...
+#     parent id    :  X
+#     """
+    # parts = []
+    # for r in child_results:
+    #     parts.append(
+    #         f"parent title :  {r.parent_title}\n"
+    #         f"child title : {r.child_title}\n"
+    #         f"child content :\n{r.child_content}\n"
+    #         f"parent id    :  {r.parent_id}\n"
+    #         f"child id    :  {r.child_id}"
 
+    #     )
+    # return "\n\n---\n\n".join(parts)
+def _format_chunks(child_results) -> str:
+        parts = []
+
+        for r in child_results:
+            parts.append(
+                f"parent title : {r['parent_title']}\n"
+                f"child title : {r['child_title']}\n"
+                f"child content :\n{r['child_content']}\n"
+                f"parent id : {r['parent_id']}\n"
+                f"child id : {r['child_id']}"
+            )
+
+        return "\n\n---\n\n".join(parts)
 
 # ───────────────────────────────────────────────────
 
