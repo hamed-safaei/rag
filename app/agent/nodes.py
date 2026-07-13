@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 from app.services import rerank_results, format_chunks, build_context, search_children
 from app.agent.services import generate_answer, evaluate_retrieved, route_query
 from app.agent.schema.graphstate import GraphState
-
+from langfuse import observe
 
 TOP_K_RETRIEVE = 10
 TOP_K_RERANK = 5
@@ -28,6 +28,7 @@ def _to_dict(record: Any) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Node 1: retrieve + rerank
 # ---------------------------------------------------------------------------
+@observe(name="retrieve")
 def node_retrieve(state: GraphState) -> Dict[str, Any]:
     child_results = search_children(
         state["query"],
@@ -50,6 +51,7 @@ def node_retrieve(state: GraphState) -> Dict[str, Any]:
 # (روی child_after_transform) صدا زده می‌شود. تنها جایی است که
 # parent_ids / child_ids / context آپدیت می‌شوند.
 # ---------------------------------------------------------------------------
+@observe(name="evaluate")
 def node_evaluate(state: GraphState) -> Dict[str, Any]:
     # اگر از مرحله‌ی transform برگشته‌ایم، فقط رکوردهای جدید را بررسی کن؛
     # وگرنه (دور اول) روی کل child_records بازیابی‌شده کار کن.
@@ -107,6 +109,7 @@ def route_after_evaluate(state: GraphState) -> str:
 # می‌گذارد. هیچ آپدیتی روی parent_ids/child_ids/context انجام نمی‌دهد —
 # آن کار فقط به عهده‌ی node_evaluate است.
 # ---------------------------------------------------------------------------
+@observe(name="transform")
 def node_transform(state: GraphState) -> Dict[str, Any]:
     query_transform = route_query(state["query"])
     sub_queries = (query_transform.get("result") or {}).get("queries", []) or []
@@ -159,6 +162,7 @@ def route_after_transform(state: GraphState) -> str:
 # ---------------------------------------------------------------------------
 # Node 4: generate
 # ---------------------------------------------------------------------------
+@observe(name="generate")
 def node_generate(state: GraphState) -> Dict[str, Any]:
     answer = generate_answer(state["query"], state["context"])
     return {"answer": answer}

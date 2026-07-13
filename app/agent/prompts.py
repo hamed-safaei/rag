@@ -44,7 +44,7 @@ evaluator_prompt = ChatPromptTemplate.from_messages(
 به تو یک سؤال کاربر و متن خام قطعات بازیابی‌شده داده می‌شود.
 هر قطعه با خط '---' از بقیه جدا شده و شامل فیلدهای parent id, parent title, child id, child title, child content است.
 
-برای هر قطعه تصمیم بگیر:
+برای هر قطعه با توجه به parent title , child title , child content  تصمیم بگیر:
 
 1. اگر محتوای همان child به‌تنهایی برای پاسخ به سؤال یا بخشی از آن کافی است، child_id را در آرایه child_ids قرار بده.
 
