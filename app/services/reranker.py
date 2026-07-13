@@ -2,7 +2,8 @@ from sentence_transformers import CrossEncoder
 
 
 reranker = CrossEncoder(
-    "BAAI/bge-reranker-v2-m3"
+    # "BAAI/bge-reranker-v2-m3"
+    "BAAI/bge-reranker-base"
 )
 
 
