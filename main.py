@@ -1,72 +1,73 @@
-from app.data.Document import RAW_DOCUMENT
-from app.models.Chunks import ParentChunk
-from app.retriever.parent_child_retriever import ParentChildRetriever
-from app.utils.Parser import parse_document
+from fastapi import FastAPI , Depends , Response , Request
+from contextlib import asynccontextmanager
+import uvicorn
+from fastapi_swagger import patch_fastapi
+from app.core import Base, app_engine
+from app.api import api_router
+from app.auth import get_current_username , get_auth_user 
+from app.api.v1.dependencies import get_jwt_auth_user
+from app.models.database import User
 
 
-def print_structure(parents: list[ParentChunk]) -> None:
-    """ساختار parent-child را به‌صورت درخت نمایش می‌دهد."""
-    print("=" * 60)
-    print("ساختار Parent-Child سند RAG فارسی")
-    print("=" * 60)
-
-    for parent in parents:
-        preview = parent.content[:80].replace("\n", " ") + "..."
-        print(f"\n📁 Parent [{parent.id}]: {parent.title}")
-        print(f"   محتوا (پیش‌نمایش): {preview}")
-
-        if parent.children:
-            for child in parent.children:
-                child_preview = child.content[:60].replace("\n", " ") + "..."
-                print(f"   └─ Child [{child.id}]: {child.title}")
-                print(f"             محتوا: {child_preview}")
-        else:
-            print("   └─ (بدون زیرعنوان)")
-
-    total_children = sum(len(p.children) for p in parents)
-    print("\n" + "=" * 60)
-    print(f"✅ تعداد کل Parents  : {len(parents)}")
-    print(f"✅ تعداد کل Children : {total_children}")
-    print("=" * 60)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print(">>> Running lifespan startup...")
+    yield
+    print(">>> App shutting down...")
 
 
-def demo_retrieval(retriever: ParentChildRetriever) -> None:
-    """چند نمونه پرسش را اجرا و نتیجه را نمایش می‌دهد."""
-    print("\n--- نمونه Retrieval ---")
-    test_queries = ["Embedding", "فارسی", "ارزیابی"]
-
-    for query in test_queries:
-        print(f"\n🔍 پرسش: '{query}'")
-        results = retriever.retrieve(query, top_k=2)
-
-        if not results:
-            print("  نتیجه‌ای یافت نشد.")
-            continue
-
-        for r in results:
-            child = r["matched_child"]
-            parent = r["parent"]
-            print(f"  ↳ Child یافت‌شده : [{child.id}] {child.title}")
-            if parent:
-                print(f"     Parent برگشتی : [{parent.id}] {parent.title}")
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url=None,
+    swagger_ui_oauth2_redirect_url=None,
+)
 
 
-def main() -> None:
-    # ۱. پارس سند
-    parents = parse_document(RAW_DOCUMENT)
 
-    # ۲. نمایش ساختار
-    print_structure(parents)
+patch_fastapi(app, docs_url="/swagger")
+app.include_router(api_router)
 
-    # ۳. ساخت retriever
-    retriever = ParentChildRetriever(parents)
 
-    # ۴. نمونه retrieval
-    demo_retrieval(retriever)
 
-    print("\n✅ ساختار parent-child آماده است.")
-    print("📌 مرحله بعدی: اضافه کردن embedding و vectorstore.")
+
+@app.get("/public")
+def public_route():
+    return {"message" : "This is a public route"}
+
+
+# @app.get("/private/basic")
+# def private_route(user : User = Depends(get_current_username)):
+#     print(user.username)
+#     return {"message" : "This is a private route"}
+
+
+# @app.get("/private/token")
+# def private_route(user = Depends(get_auth_user)):
+#     print(user.username)
+#     return {"message" : "This is a private route"}
+
+
+@app.get("/private/token/jwt")
+def private_route(user = Depends(get_jwt_auth_user)):
+    print(user.id)
+    return {"message" : "This is a private route"}
+
+
+
+# @app.post("/set-cookie")
+# def create_cookie(response: Response):
+#     response.set_cookie(key="test", value="something")
+#     return {"message": "Cookie Has Been Set"}
+
+
+# @app.get("/get-cookie")
+# def get_cookie(request: Request):
+#     print(request.cookies.get('test'))
+#     return {"message": "Cookie Has Been Set"}
+
+
+
 
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run(app, host="0.0.0.0", port=8008)
