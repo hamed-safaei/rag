@@ -1,19 +1,31 @@
 from typing import Any, Dict, List
+from uuid import UUID
 
 from app.services import rerank_results, format_chunks, build_context, search_children
-from app.agent.services import generate_answer, evaluate_retrieved, route_query
+from app.agent.services import (
+    generate_answer,
+    evaluate_retrieved,
+    route_query,       
+    classify_query,     
+)
 from app.agent.schema.graphstate import GraphState
+from app.core.database.database import AppSessionLocal
+from app.models.database import Message
 from langfuse import observe
+from langchain_core.runnables import RunnableConfig
+from app.services import format_history
+
+
 
 TOP_K_RETRIEVE = 10
 TOP_K_RERANK = 5
 TRANSFORM_TOP_K = 1
 PARENT_COLLECTION = "loader_parents"
 CHILD_COLLECTION = "loader_children"
+HISTORY_LIMIT = 10
 
 
 def _to_dict(record: Any) -> Dict[str, Any]:
-    """تبدیل یک child record (dict یا آبجکت ChildSearchResult) به dict یکنواخت."""
     if isinstance(record, dict):
         return record
     return {
@@ -25,11 +37,55 @@ def _to_dict(record: Any) -> Dict[str, Any]:
     }
 
 
+def _needs_retrieve(state: GraphState) -> bool:
+    return state.get("route") in ("retrieve", "both")
+
+
+def _needs_history(state: GraphState) -> bool:
+    return state.get("route") in ("history", "both")
+
+
 # ---------------------------------------------------------------------------
-# Node 1: retrieve + rerank
+
+@observe(name="route")
+def node_route(state: GraphState) -> Dict[str, Any]:
+    decision = classify_query(state["query"])
+    return {"route": decision.value}
+
+
 # ---------------------------------------------------------------------------
+
+
+@observe(name="history")
+def node_history(state: GraphState, config: RunnableConfig) -> Dict[str, Any]:
+    if not _needs_history(state):
+        return {"history": []}
+
+    db = config["configurable"]["db"]
+
+    messages = (
+        db.query(Message)
+        .filter(Message.session_id == state["session_id"])
+        .order_by(Message.created_at.desc(), Message.id.desc())
+        .limit(HISTORY_LIMIT)
+        .all()
+    )
+    messages.reverse()
+    history = [{"role": m.role, "content": m.content} for m in messages]
+
+    return {
+        "history": format_history(history)
+    }
+
+
+# ---------------------------------------------------------------------------
+
+
 @observe(name="retrieve")
 def node_retrieve(state: GraphState) -> Dict[str, Any]:
+    if not _needs_retrieve(state):
+        return {"child_records": []}
+
     child_results = search_children(
         state["query"],
         collection_name=CHILD_COLLECTION,
@@ -45,16 +101,17 @@ def node_retrieve(state: GraphState) -> Dict[str, Any]:
     return {"child_records": top_results}
 
 
+
+
 # ---------------------------------------------------------------------------
-# Node 2: evaluate
-# این نود هم بار اول (روی child_records اولیه) و هم بعد از transform
-# (روی child_after_transform) صدا زده می‌شود. تنها جایی است که
-# parent_ids / child_ids / context آپدیت می‌شوند.
-# ---------------------------------------------------------------------------
+
+
+
 @observe(name="evaluate")
 def node_evaluate(state: GraphState) -> Dict[str, Any]:
-    # اگر از مرحله‌ی transform برگشته‌ایم، فقط رکوردهای جدید را بررسی کن؛
-    # وگرنه (دور اول) روی کل child_records بازیابی‌شده کار کن.
+    if not _needs_retrieve(state):
+        return {"needs_retry": False}
+
     child_after_transform = state.get("child_after_transform") or []
     round_records = child_after_transform if child_after_transform else state["child_records"]
 
@@ -69,8 +126,6 @@ def node_evaluate(state: GraphState) -> Dict[str, Any]:
     existing_parent_set = set(existing_parent_ids)
     existing_child_set = set(existing_child_ids)
 
-    # new_child_ids همیشه دقیقاً از دل round_records می‌آیند (چون همان چیزی
-    # است که به evaluator نشان داده شد)، پس همان pool برای build_context کافی است
     new_context = build_context(
         {"parent_ids": new_parent_ids, "child_ids": new_child_ids},
         round_records,
@@ -97,18 +152,19 @@ def node_evaluate(state: GraphState) -> Dict[str, Any]:
 
 
 def route_after_evaluate(state: GraphState) -> str:
-    """فقط بار اول (retried هنوز false) اگر مدل retry=true داد، برو به transform."""
+    if not _needs_retrieve(state):
+        return "retrieve_done"
     if state.get("needs_retry") and not state.get("retried"):
         return "transform"
-    return "generate"
+    return "retrieve_done"
+
+
+
 
 
 # ---------------------------------------------------------------------------
-# Node 3: query transform + جست‌وجوی مجدد
-# این نود فقط رکوردهای جدید را پیدا و فیلتر می‌کند و در child_after_transform
-# می‌گذارد. هیچ آپدیتی روی parent_ids/child_ids/context انجام نمی‌دهد —
-# آن کار فقط به عهده‌ی node_evaluate است.
-# ---------------------------------------------------------------------------
+
+
 @observe(name="transform")
 def node_transform(state: GraphState) -> Dict[str, Any]:
     query_transform = route_query(state["query"])
@@ -123,13 +179,10 @@ def node_transform(state: GraphState) -> Dict[str, Any]:
         )
         all_new_child_results.extend(results)
 
-    # فقط موارد یونیک
     unique_child_results = list(
         {item.child_id: item for item in all_new_child_results}.values()
     )
 
-    # فیلتر بر اساس parent_ids/child_ids ای که تا این لحظه توسط evaluate
-    # تایید شده‌اند (همان منطق اصلی و درست)
     parent_ids_set = set(state.get("parent_ids", []) or [])
     child_ids_set = set(state.get("child_ids", []) or [])
 
@@ -139,7 +192,6 @@ def node_transform(state: GraphState) -> Dict[str, Any]:
         if item.parent_id not in parent_ids_set and item.child_id not in child_ids_set
     ]
 
-    # چیز جدیدی پیدا نشد → مستقیم به سمت generate می‌رویم
     if not filtered_child_results:
         return {"child_after_transform": [], "retried": True}
 
@@ -152,17 +204,37 @@ def node_transform(state: GraphState) -> Dict[str, Any]:
 
 
 def route_after_transform(state: GraphState) -> str:
-    """اگر رکورد جدیدی پیدا شد برو evaluate تا بررسی و state ها آپدیت شوند،
-    وگرنه مستقیم برو generate."""
     if state.get("child_after_transform"):
         return "evaluate"
-    return "generate"
+    return "retrieve_done"
 
 
 # ---------------------------------------------------------------------------
-# Node 4: generate
+
+
+
+def node_retrieve_done(state: GraphState) -> Dict[str, Any]:
+    return {}
+
+
 # ---------------------------------------------------------------------------
+
 @observe(name="generate")
 def node_generate(state: GraphState) -> Dict[str, Any]:
-    answer = generate_answer(state["query"], state["context"])
+    route = state.get("route")
+
+    if route == "none":
+        return {
+            "answer": (
+                "این سؤال به حوزه‌ی تخصصی من (سیستم‌های RAG) مربوط نیست و "
+                "به تاریخچه‌ی مکالمه هم ارتباطی ندارد. لطفاً سؤالی درباره‌ی "
+                "سیستم‌های RAG بپرسید."
+            )
+        }
+
+    answer = generate_answer(
+        query=state["query"],
+        context=state.get("context", ""),
+        history=state.get("history", []),
+    )
     return {"answer": answer}

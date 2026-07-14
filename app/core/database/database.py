@@ -13,7 +13,7 @@ APP_DATABASE_URL = (
 
 app_engine = create_engine(
     APP_DATABASE_URL,
-    echo=True,
+    echo=False,
 )
 
 AppSessionLocal = sessionmaker(

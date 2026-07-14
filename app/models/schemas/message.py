@@ -6,13 +6,6 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    """
-    ورودی endpoint ارسال پیام.
-
-    نکته مهم: در جدول messages ستون session_id از نوع uuid است.
-    اگر در پروژه‌ی شما session.id از نوع int (autoincrement) است،
-    این تایپ را به int تغییر دهید تا با مدل SessionModel هم‌خوان شود.
-    """
     session_id: Optional[UUID] = Field(default=None, examples=[None])
     content: str = Field(..., min_length=1)
 

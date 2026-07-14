@@ -1,3 +1,6 @@
+from typing import Dict, List, Optional
+
+
 
 def format_chunks(child_results) -> str:
     parts = []
@@ -10,7 +13,6 @@ def format_chunks(child_results) -> str:
             parent_id = r["parent_id"]
             child_id = r["child_id"]
         else:
-            # ChildSearchResult یا هر آبجکتی با attributeهای مشابه
             parent_title = r.parent_title
             child_title = r.child_title
             child_content = r.child_content
@@ -26,3 +28,17 @@ def format_chunks(child_results) -> str:
         )
 
     return "\n\n---\n\n".join(parts)
+
+
+
+
+def format_history(history: List[Dict[str, str]]) -> str:
+    if not history:
+        return "(تاریخچه‌ای موجود نیست)"
+
+    lines = []
+    for m in history:
+        role = "کاربر" if m["role"] == "user" else "دستیار"
+        lines.append(f"{role}: {m['content']}")
+
+    return "\n\n".join(lines)
