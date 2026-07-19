@@ -1,7 +1,10 @@
 from app.agent.chians import router_chain
-from app.agent.schema import RouteDecision, RouterOutput
+from app.agent.schema import RouterOutput
 
 
-def classify_query(query: str) -> RouteDecision:
-    result: RouterOutput = router_chain.invoke({"query": query})
-    return result.decision
+def classify_query(query: str, history: str = "") -> RouterOutput:
+    result: RouterOutput = router_chain.invoke({
+        "query": query,
+        "history": history or "(تاریخچه‌ای وجود ندارد)",
+    })
+    return result

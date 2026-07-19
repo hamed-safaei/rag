@@ -3,9 +3,10 @@ from typing import Any, Dict, List, TypedDict
 
 class GraphState(TypedDict, total=False):
     query: str
+    rewritten_query: str          # جدید: فقط برای retrieve/transform استفاده می‌شود
     session_id: str
 
-    route: str 
+    route: str
 
     parent_ids: List[str]
     child_ids: List[str]

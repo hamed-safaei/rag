@@ -1,20 +1,17 @@
 from typing import Any, Dict, List
-from uuid import UUID
 
 from app.services import rerank_results, format_chunks, build_context, search_children
 from app.agent.services import (
     generate_answer,
     evaluate_retrieved,
-    route_query,       
-    classify_query,     
+    route_query,        # decompose/multiquery chain
+    classify_query,      # router
 )
 from app.agent.schema.graphstate import GraphState
-from app.core.database.database import AppSessionLocal
 from app.models.database import Message
 from langfuse import observe
 from langchain_core.runnables import RunnableConfig
-from app.services import format_history
-
+from app.agent.schema import RouteDecision
 
 
 TOP_K_RETRIEVE = 10
@@ -37,63 +34,68 @@ def _to_dict(record: Any) -> Dict[str, Any]:
     }
 
 
-def _needs_retrieve(state: GraphState) -> bool:
-    return state.get("route") in ("retrieve", "both")
-
-
-def _needs_history(state: GraphState) -> bool:
-    return state.get("route") in ("history", "both")
+def _search_query(state: GraphState) -> str:
+    """پرسشی که برای retrieve/transform استفاده می‌شود: بازنویسی‌شده در صورت وجود، وگرنه اصلی."""
+    return state.get("rewritten_query") or state["query"]
 
 
 # ---------------------------------------------------------------------------
-
-@observe(name="route")
-def node_route(state: GraphState) -> Dict[str, Any]:
-    decision = classify_query(state["query"])
-    return {"route": decision.value}
-
-
-# ---------------------------------------------------------------------------
-
-
 @observe(name="history")
 def node_history(state: GraphState, config: RunnableConfig) -> Dict[str, Any]:
-    if not _needs_history(state):
-        return {"history": []}
-
     db = config["configurable"]["db"]
+    session_id = state["session_id"]
 
     messages = (
         db.query(Message)
-        .filter(Message.session_id == state["session_id"])
+        .filter(Message.session_id == session_id)
         .order_by(Message.created_at.desc(), Message.id.desc())
+        .offset(1)              # رد کردن آخرین پیام (همان query فعلی که قبلاً ثبت شده)
         .limit(HISTORY_LIMIT)
         .all()
     )
-    messages.reverse()
-    history = [{"role": m.role, "content": m.content} for m in messages]
+    messages = list(reversed(messages))  # قدیم -> جدید
 
-    return {
-        "history": format_history(history)
-    }
+    role_map = {"user": "کاربر", "agent": "دستیار"}
+    lines = [
+        f"{role_map.get(getattr(m, 'role', 'user'), 'کاربر')}: {getattr(m, 'content', '')}"
+        for m in messages
+    ]
+    history_text = "\n\n".join(lines) if lines else "(تاریخچه‌ای وجود ندارد)"
 
+    return {"history": history_text}
+
+# ---------------------------------------------------------------------------
+@observe(name="route")
+def node_route(state: GraphState, config: RunnableConfig) -> Dict[str, Any]:
+    result = classify_query(state["query"], state.get("history", ""))
+
+    update: Dict[str, Any] = {"route": result.decision.value}
+    if result.decision == RouteDecision.retrieve:
+        # query اصلی کاربر دست‌نخورده می‌ماند؛ فقط rewritten_query ست می‌شود
+        update["rewritten_query"] = result.query or state["query"]
+
+    return update
 
 # ---------------------------------------------------------------------------
 
+@observe(name="after_route")
+def route_after_route(state: GraphState) -> str:
+    return state["route"]
 
+
+# ---------------------------------------------------------------------------
 @observe(name="retrieve")
 def node_retrieve(state: GraphState) -> Dict[str, Any]:
-    if not _needs_retrieve(state):
-        return {"child_records": []}
+    query = _search_query(state)
 
     child_results = search_children(
-        state["query"],
+        query,
         collection_name=CHILD_COLLECTION,
         top_k=TOP_K_RETRIEVE,
     )
 
     top_results = rerank_results(
-        state["query"],
+        query,
         child_results,
         top_k=TOP_K_RERANK,
     )
@@ -101,22 +103,16 @@ def node_retrieve(state: GraphState) -> Dict[str, Any]:
     return {"child_records": top_results}
 
 
-
-
 # ---------------------------------------------------------------------------
-
-
-
 @observe(name="evaluate")
 def node_evaluate(state: GraphState) -> Dict[str, Any]:
-    if not _needs_retrieve(state):
-        return {"needs_retry": False}
+    query = _search_query(state)
 
     child_after_transform = state.get("child_after_transform") or []
     round_records = child_after_transform if child_after_transform else state["child_records"]
 
     raw_text = format_chunks(round_records)
-    ids_input = evaluate_retrieved(state["query"], raw_text)
+    ids_input = evaluate_retrieved(query, raw_text)
 
     new_parent_ids = ids_input.get("parent_ids", []) or []
     new_child_ids = ids_input.get("child_ids", []) or []
@@ -152,22 +148,16 @@ def node_evaluate(state: GraphState) -> Dict[str, Any]:
 
 
 def route_after_evaluate(state: GraphState) -> str:
-    if not _needs_retrieve(state):
-        return "retrieve_done"
     if state.get("needs_retry") and not state.get("retried"):
         return "transform"
-    return "retrieve_done"
-
-
-
+    return "generate"
 
 
 # ---------------------------------------------------------------------------
-
-
 @observe(name="transform")
 def node_transform(state: GraphState) -> Dict[str, Any]:
-    query_transform = route_query(state["query"])
+    query = _search_query(state)
+    query_transform = route_query(query)
     sub_queries = (query_transform.get("result") or {}).get("queries", []) or []
 
     all_new_child_results: List[Any] = []
@@ -204,37 +194,17 @@ def node_transform(state: GraphState) -> Dict[str, Any]:
 
 
 def route_after_transform(state: GraphState) -> str:
-    if state.get("child_after_transform"):
-        return "evaluate"
-    return "retrieve_done"
+    # چه رکورد جدید پیدا شده باشد چه نه، بعد از transform همیشه یک‌بار به evaluate برمی‌گردیم.
+    # روند retried=True در evaluate جلوی loop دوباره را می‌گیرد (route_after_evaluate).
+    return "evaluate"
 
 
 # ---------------------------------------------------------------------------
-
-
-
-def node_retrieve_done(state: GraphState) -> Dict[str, Any]:
-    return {}
-
-
-# ---------------------------------------------------------------------------
-
 @observe(name="generate")
 def node_generate(state: GraphState) -> Dict[str, Any]:
-    route = state.get("route")
-
-    if route == "none":
-        return {
-            "answer": (
-                "این سؤال به حوزه‌ی تخصصی من (سیستم‌های RAG) مربوط نیست و "
-                "به تاریخچه‌ی مکالمه هم ارتباطی ندارد. لطفاً سؤالی درباره‌ی "
-                "سیستم‌های RAG بپرسید."
-            )
-        }
-
     answer = generate_answer(
-        query=state["query"],
+        query=state["query"],              # همیشه سوال اصلی کاربر، نه rewritten_query
         context=state.get("context", ""),
-        history=state.get("history", []),
+        history=state.get("history", ""),
     )
     return {"answer": answer}
