@@ -1,7 +1,3 @@
-"""
-مدل‌های Pydantic مربوط به خروجی طبقه‌بندی بلاک‌های سند.
-"""
-
 from pydantic import BaseModel, Field
 from typing import Literal
 

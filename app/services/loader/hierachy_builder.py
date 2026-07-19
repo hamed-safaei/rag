@@ -1,16 +1,9 @@
-"""
-تبدیل بلاک‌های لیبل‌گذاری‌شده (خروجی classify_document) به ساختار
-سلسله‌مراتبی ParentChunk / ChildChunk که در بقیه‌ی پروژه (مثلاً برای
-ایندکس‌کردن در RAG) استفاده می‌شود.
-"""
 
 from uuid import uuid4
-
 from app.models.Chunks import ParentChunk, ChildChunk
 
 
 def build_hierarchy(blocks, result):
-    # index -> level
     labels = {
         item.index: item.level
         for item in result.labels

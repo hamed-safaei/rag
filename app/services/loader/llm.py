@@ -1,0 +1,18 @@
+import os
+from langchain_openai import ChatOpenAI
+from app.core.config import Settings
+from app.models.schemas.loader import ClassificationResult
+
+
+
+OPENAI_API_KEY = Settings.OPENAI_API_KEY
+BASE_URL = "https://api.gapgpt.app/v1"
+
+llm = ChatOpenAI(
+    model="gpt-4.1-mini",
+    temperature=0,
+    base_url=BASE_URL,
+    api_key=OPENAI_API_KEY,
+)
+
+structured_llm = llm.with_structured_output(ClassificationResult)

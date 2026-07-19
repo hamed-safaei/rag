@@ -1,14 +1,3 @@
-"""
-اجرای کامل جریان طبقه‌بندی ساختاری سند، batch به batch.
-
-نسخه‌ی فعلی نسبت به نسخه‌ی ساده‌ی اولیه دو تفاوت اصلی دارد:
-- بلاک‌های overlap دیگر توسط دور بعدی «دوباره لیبل‌گذاری» نمی‌شوند؛ فقط
-  به‌عنوان بلاک‌های زمینه‌ای (context) همراه با لیبل قطعی‌شان نشان داده می‌شوند.
-- یک فیلتر سخت‌گیرانه در کد وجود دارد: حتی اگر مدل اشتباهاً برای یک بلاک
-  زمینه‌ای هم خروجی داد، آن نادیده گرفته می‌شود (هرگز لیبل قبلی overwrite
-  نمی‌شود).
-"""
-
 from .batching import make_batches_with_context
 from .prompts import build_blocks_prompt, build_context_prompt, build_hint
 from app.models.schemas.loader import BlockLabel, ClassificationResult

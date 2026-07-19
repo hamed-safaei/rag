@@ -1,8 +1,3 @@
-"""
-قالب پرامپت تحلیل ساختار سند و توابع کمکی برای تبدیل بلاک‌ها/hint/context
-به متنی که داخل پرامپت قرار می‌گیرد.
-"""
-
 from langchain_core.prompts import ChatPromptTemplate
 
 
@@ -37,14 +32,29 @@ parent:
 - معمولاً کوتاه‌تر از متن عادی است.
 - ممکن است شماره‌گذاری داشته باشد.
 - مراحل parent نیستند
+-عنوان ها معمولا الگو های مشابه را دنبال میکنند
+نمونه رایج الگو ها :
+1._______
+2._______
+یا 
+الف )
+ب )
+و ...
+به این الگو ها برای شناسایی توجه کن
+
 
 child:
 - زیرعنوان یک parent
 - معمولاً عنوان یک زیربخش است.
-الگو ها :
-1.1 1.2 1.3 ...
-الف) ب) و ..
-نکته بسیار مهم : تا یک سطح CHILD شناسایی کن و داخل یک CHILD دیگر CHILD نخواهیم داشت
+منطق تشخیص Child
+پس از اینکه یک عنوان به‌عنوان child شناسایی شد، الگوی شماره‌گذاری یا نشانه‌گذاری آن به‌عنوان مرجع همان سطح در نظر گرفته می‌شود و انتظار می‌رود childهای بعدی از همان الگو به‌صورت ترتیبی پیروی کنند.
+
+مثال‌ها:
+
+اگر الف) به‌عنوان child شناسایی شد، انتظار می‌رود ب)، سپس پ) و ... نیز childهای هم‌سطح باشند.
+اگر 1.1 به‌عنوان child شناسایی شد، انتظار می‌رود 1.2، 1.3 و ... childهای هم‌سطح باشند.
+
+نکته مهم: ممکن است داخل یک child، زیربخش‌هایی با الگوهای دیگری (مانند الف), ب) یا 1.1.1, 1.1.2) وجود داشته باشد. این موارد یک سطح پایین‌تر از child هستند و نباید به‌عنوان child برچسب‌گذاری شوند. فقط عناوین هم‌سطح با اولین child شناسایی‌شده باید برچسب child دریافت کنند.
 
 body:
 - متن معمولی
@@ -52,7 +62,6 @@ body:
 - ادامه یک پاراگراف
 
 نکات:
--به سایز فونت هیچ توجه ای نکن و براساس محتوا تصمیم گیری بکن
 - خروجی فقط باید مطابق Schema باشد و دقیقاً به تعداد و index بلاک‌های جدید باشد.
 """
 
@@ -60,13 +69,11 @@ prompt = ChatPromptTemplate.from_template(STRUCTURE_PROMPT)
 
 
 def build_blocks_prompt(blocks: list[dict]) -> str:
-    """بلاک‌های 'جدید' را به متنی قابل استفاده در پرامپت تبدیل می‌کند."""
     lines = []
 
     for block in blocks:
         lines.append(
             f"[{block['index']}] "
-            f"font_size={block['font_size']} "
             f"text={block['text']}"
         )
 
@@ -74,7 +81,6 @@ def build_blocks_prompt(blocks: list[dict]) -> str:
 
 
 def build_context_prompt(context_blocks: list[dict], final_labels: dict[int, str]) -> str:
-    """بلاک‌های 'زمینه‌ای' را همراه با لیبل قطعی‌شان به متن پرامپت تبدیل می‌کند."""
     if not context_blocks:
         return "(بدون بلاک زمینه‌ای - این اولین بخش سند است)"
 
@@ -83,7 +89,6 @@ def build_context_prompt(context_blocks: list[dict], final_labels: dict[int, str
         label = final_labels.get(block["index"], "body")
         lines.append(
             f"[{block['index']}] "
-            f"font_size={block['font_size']} "
             f"label={label} "
             f"text={block['text']}"
         )
@@ -91,10 +96,6 @@ def build_context_prompt(context_blocks: list[dict], final_labels: dict[int, str
 
 
 def build_hint(blocks_by_index: dict[int, dict], labels: dict[int, str]) -> str:
-    """
-    آخرین parent/child قطعی‌شده تا این لحظه را (حتی اگر خارج از پنجره‌ی
-    overlap فعلی باشد) به‌عنوان خلاصه‌ی وضعیت برمی‌گرداند.
-    """
     last_parent_text = None
     last_child_text = None
 
