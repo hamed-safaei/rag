@@ -194,9 +194,9 @@ def node_transform(state: GraphState) -> Dict[str, Any]:
 
 
 def route_after_transform(state: GraphState) -> str:
-    # چه رکورد جدید پیدا شده باشد چه نه، بعد از transform همیشه یک‌بار به evaluate برمی‌گردیم.
-    # روند retried=True در evaluate جلوی loop دوباره را می‌گیرد (route_after_evaluate).
-    return "evaluate"
+    if state.get("child_after_transform"):
+        return "evaluate"
+    return "generate"
 
 
 # ---------------------------------------------------------------------------

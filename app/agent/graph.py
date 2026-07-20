@@ -46,7 +46,7 @@ def build_graph():
     workflow.add_conditional_edges(
         "transform",
         route_after_transform,
-        {"evaluate": "evaluate"},
+        {"evaluate": "evaluate" , "generate": "generate"},
     )
 
     workflow.add_edge("generate", END)
