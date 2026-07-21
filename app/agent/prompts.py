@@ -82,6 +82,7 @@ evaluator_prompt = ChatPromptTemplate.from_messages(
 
 قانون سخت‌گیرانه:
 اگر parent_id یک آیتم در parent_ids قرار گرفت، هیچ‌یک از child_idهای متعلق به همان parent_id نباید در آرایه child_ids قرار بگیرند.
+چون زمانی که یک parent انتخاب میشود ما به تمام child های آن دسترسی خواهیم داشت و نباید جداگانه دوباره child های آن را اضافه کنی .
 
 سپس مقدار retry را تعیین کن:
 
@@ -96,7 +97,7 @@ evaluator_prompt = ChatPromptTemplate.from_messages(
 {{
   "parent_ids": ["..."],
   "child_ids": ["..."],
-  "retry": false
+  "retry": false or true
 }}
 """),
         (

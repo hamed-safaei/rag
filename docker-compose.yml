@@ -13,8 +13,8 @@ services:
     image: neo4j:latest
     container_name: neo4j_db_rag
     ports:
-      - "7474:7474"   # Web UI
-      - "8073:7687"   # Bolt protocol
+      - "7474:7474"
+      - "8073:7687"
     environment:
       NEO4J_AUTH: neo4j/password123
     volumes:
@@ -32,8 +32,20 @@ services:
       - redis_data:/data
     restart: unless-stopped
 
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: redis_insight
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsight_data:/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
 volumes:
   qdrant_storage:
   neo4j_data:
   neo4j_logs:
   redis_data:
+  redisinsight_data:

@@ -19,7 +19,8 @@ from .session_repository import (
     get_session_by_id,
     get_sessions_by_user_id,
     update_session_title,
-    delete_session
+    delete_session,
+    increment_unsummarized_count
 )
 
 

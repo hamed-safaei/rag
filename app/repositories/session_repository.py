@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models.database.session import Session as SessionModel
 from app.models.database.message import Message
+from sqlalchemy import update
 
 
 def create_session(db: Session, user_id: int) -> SessionModel:
@@ -43,3 +44,23 @@ def delete_session(db: Session, session_id: int) -> None:
     db.query(Message).filter(Message.session_id == session_id).delete()
     db.query(SessionModel).filter(SessionModel.id == session_id).delete()
     db.commit()
+
+
+
+
+
+def increment_unsummarized_count(db, session_id):
+    stmt = (
+        update(SessionModel)
+        .where(SessionModel.id == session_id)
+        .values(
+            unsummarized_count=SessionModel.unsummarized_count + 1
+        )
+        .returning(SessionModel.unsummarized_count)
+    )
+
+    new_count = db.execute(stmt).scalar_one()
+
+    db.commit()
+
+    return new_count

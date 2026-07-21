@@ -8,7 +8,7 @@ from app.agent.services import (
     classify_query,      # router
 )
 from app.agent.schema.graphstate import GraphState
-from app.models.database import Message
+from app.models.database import Message , Session
 from langfuse import observe
 from langchain_core.runnables import RunnableConfig
 from app.agent.schema import RouteDecision
@@ -40,30 +40,79 @@ def _search_query(state: GraphState) -> str:
 
 
 # ---------------------------------------------------------------------------
+# @observe(name="history")
+# def node_history(state: GraphState, config: RunnableConfig) -> Dict[str, Any]:
+#     db = config["configurable"]["db"]
+#     session_id = state["session_id"]
+
+#     messages = (
+#         db.query(Message)
+#         .filter(Message.session_id == session_id)
+#         .order_by(Message.created_at.desc(), Message.id.desc())
+#         .offset(1)              # رد کردن آخرین پیام (همان query فعلی که قبلاً ثبت شده)
+#         .limit(HISTORY_LIMIT)
+#         .all()
+#     )
+#     messages = list(reversed(messages))  # قدیم -> جدید
+
+#     role_map = {"user": "کاربر", "agent": "دستیار"}
+#     lines = [
+#         f"{role_map.get(getattr(m, 'role', 'user'), 'کاربر')}: {getattr(m, 'content', '')}"
+#         for m in messages
+#     ]
+#     history_text = "\n\n".join(lines) if lines else "(تاریخچه‌ای وجود ندارد)"
+
+#     return {"history": history_text}
+
 @observe(name="history")
 def node_history(state: GraphState, config: RunnableConfig) -> Dict[str, Any]:
     db = config["configurable"]["db"]
     session_id = state["session_id"]
 
-    messages = (
-        db.query(Message)
-        .filter(Message.session_id == session_id)
-        .order_by(Message.created_at.desc(), Message.id.desc())
-        .offset(1)              # رد کردن آخرین پیام (همان query فعلی که قبلاً ثبت شده)
-        .limit(HISTORY_LIMIT)
-        .all()
+    session = (
+        db.query(Session.history_summary, Session.unsummarized_count)
+        .filter(Session.id == session_id)
+        .first()
     )
-    messages = list(reversed(messages))  # قدیم -> جدید
 
-    role_map = {"user": "کاربر", "agent": "دستیار"}
-    lines = [
-        f"{role_map.get(getattr(m, 'role', 'user'), 'کاربر')}: {getattr(m, 'content', '')}"
-        for m in messages
-    ]
-    history_text = "\n\n".join(lines) if lines else "(تاریخچه‌ای وجود ندارد)"
+    parts = []
 
-    return {"history": history_text}
+    if session and session.history_summary:
+        parts.append(
+            f"پیام‌های خلاصه‌شده قبلی:\n{session.history_summary}"
+        )
 
+    if session and session.unsummarized_count > 0:
+        messages = (
+            db.query(Message)
+            .filter(Message.session_id == session_id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .offset(1)
+            .limit(session.unsummarized_count * 2)
+            .all()
+        )
+
+        messages.reverse()
+
+        role_map = {
+            "user": "کاربر",
+            "agent": "دستیار",
+        }
+
+        recent_messages = "\n\n".join(
+            f"{role_map.get(m.role, 'کاربر')}:\n{m.content}"
+            for m in messages
+        )
+
+        parts.append(
+            f"چند پیام اخیر:\n{recent_messages}"
+        )
+
+    history = "\n\n".join(parts) if parts else "(تاریخچه‌ای وجود ندارد)"
+
+    return {
+        "history": history,
+    }
 # ---------------------------------------------------------------------------
 @observe(name="route")
 def node_route(state: GraphState, config: RunnableConfig) -> Dict[str, Any]:
